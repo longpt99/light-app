@@ -18,18 +18,18 @@ import {
   TouchableHighlight,
   StyleSheet,
   LogBox,
-  // Text,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import {SwipeListView} from 'react-native-swipe-list-view';
 import Modal from 'react-native-modal';
 import {firebase} from '../firebase/config';
-import {v4 as uuidv4} from 'uuid';
 import {
   connectActionSheet,
   useActionSheet,
 } from '@expo/react-native-action-sheet';
 import axios from 'axios';
+import Profile from './modal/Profile';
+import NewRoom from './modal/NewRoom';
 LogBox.ignoreLogs(['Setting a timer', 'VirtualizedLists']);
 
 const Home = ({route, navigation}) => {
@@ -38,10 +38,10 @@ const Home = ({route, navigation}) => {
   const [lightList, setLightList] = useState([]);
   const [isVisibleIp, setIsVisibleIp] = useState(false);
   const [isVisibleInfo, setIsVisibleInfo] = useState(false);
-  const [addLight, setAddLight] = useState(false);
-  const [roomName, setRoomName] = useState('');
-  const [ipAddress, setIpAddress] = useState('');
+  const [isVisibaleNewRoom, setIsVisibaleNewRoom] = useState(false);
+
   const [idRoom, setIdRoom] = useState('');
+
   const {showActionSheetWithOptions} = useActionSheet();
 
   const clearState = () => {
@@ -49,7 +49,7 @@ const Home = ({route, navigation}) => {
     setLightList([]);
     setIsVisibleIp(false);
     setIsVisibleInfo(false);
-    setAddLight(false);
+    setIsVisibaleNewRoom(false);
     setRoomName('');
     setIpAddress('');
     setIdRoom('');
@@ -78,29 +78,25 @@ const Home = ({route, navigation}) => {
   useEffect(() => {
     firebase
       .database()
-      .ref(`lights/${userId}/data`)
-      .once('value', function (snapshot) {
-        const values = [];
-        snapshot.forEach((item) => {
-          const data = {...item.val()};
-          values.push({id: item.key, ...data});
-        });
-        setLightList(values);
-      });
-    firebase
-      .database()
       .ref(`lights/${userId}/`)
       .once('value', function (snapshot) {
         const {email, name, data} = snapshot.val();
+        const values = [];
+        Object.entries(data).forEach((entry) => {
+          const [key, value] = entry;
+          values.push({key, id: key, ...value});
+        });
+        setLightList(values);
         setUserInfo({
           email,
           name,
-          totalRoom: Object.keys(data).length.toString(),
+          totalRoom: data ? Object.keys(data).length : 0,
         });
       });
   }, [userId]);
 
   const sendApi = async (ip, val) => {
+    console.log(ip, val);
     await axios.get(`http://${ip}/?LED=E360_${val ? 'ON' : 'OFF'}`);
     return;
   };
@@ -111,7 +107,6 @@ const Home = ({route, navigation}) => {
     for (let i = 0; i < len; i++) {
       if (newData[i].id === id) {
         const val = !newData[i].isEnable;
-        sendApi(newData[i].ip, val);
         newData[i].isEnable = val;
         firebase
           .database()
@@ -129,6 +124,7 @@ const Home = ({route, navigation}) => {
     newData.splice(prevIndex, 1);
     firebase.database().ref(`lights/${userId}/data/${id}`).remove();
     setLightList(newData);
+    setUserInfo({...userInfo, totalRoom: userInfo.totalRoom - 1});
   };
 
   const getId = (id) => {
@@ -161,68 +157,60 @@ const Home = ({route, navigation}) => {
     await Promise.all([setLightList(newData), setIdRoom('')]);
   };
 
-  const renderItem = (data) => (
-    <TouchableHighlight
-      onPress={() => console.log('1')}
-      style={styles.rowFront}
-      underlayColor={'#fff'}>
-      <View
-        style={{
-          flex: 1,
-          flexDirection: 'column',
-        }}>
-        <View
-          style={{
-            flex: 1,
-            flexDirection: 'row',
-            marginTop: 10,
-            alignItems: 'center',
-          }}>
-          <Icon
-            name={data.item.isEnable ? 'bulb' : 'bulb-outline'}
-            style={{color: 'orange'}}
-          />
-          <View style={{marginLeft: 20}}>
-            {isVisibleIp ? (
-              <Text>
-                {data.item.name} -{' '}
-                <Text style={styles.textIp}>{data.item.ip}</Text>
-              </Text>
-            ) : (
-              <Text>{data.item.name}</Text>
-            )}
-            <Text note>Light is {data.item.isEnable ? 'ON' : 'OFF'}</Text>
-          </View>
-          <Right>
-            <Switch
-              trackColor={{false: '#767577', true: '#81b0ff'}}
-              thumbColor={'#f4f3f4'}
-              onValueChange={() => toggleSwitch(data.item.id)}
-              value={data.item.isEnable}
-            />
-          </Right>
-        </View>
-        <View>
-          <Slider
+  const renderItem = (data) => {
+    const {ip, isEnable, id, name, value} = data.item;
+    return (
+      <TouchableHighlight
+        onPress={() => console.log('1')}
+        style={styles.rowFront}
+        underlayColor={'#fff'}>
+        <>
+          <View
             style={{
-              width: '100%',
-              flex: 1,
+              flexDirection: 'row',
               alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            minimumValue={0}
-            maximumValue={100}
-            minimumTrackTintColor="#3e8aff"
-            maximumTrackTintColor="#ddd"
-            thumbTintColor="orange"
-            value={data.item.value}
-            onSlidingStart={() => getId(data.item.id)}
-            onSlidingComplete={setLightValue}
-          />
-        </View>
-      </View>
-    </TouchableHighlight>
-  );
+            }}>
+            <Icon
+              name={isEnable ? 'bulb' : 'bulb-outline'}
+              style={{color: 'orange'}}
+            />
+            <View style={{marginLeft: 20}}>
+              <Text>
+                {name}
+                {isVisibleIp && (
+                  <Text style={styles.textIp}>&nbsp;-&nbsp;{ip}</Text>
+                )}
+              </Text>
+              <Text note>Light is {isEnable ? 'ON' : 'OFF'}</Text>
+            </View>
+            <Right>
+              <Switch
+                trackColor={{false: '#767577', true: '#81b0ff'}}
+                thumbColor={'#f4f3f4'}
+                onValueChange={() => toggleSwitch(id)}
+                value={isEnable}
+              />
+            </Right>
+          </View>
+          <View>
+            <Slider
+              style={{
+                marginTop: 15,
+              }}
+              minimumValue={0}
+              maximumValue={100}
+              minimumTrackTintColor="#3e8aff"
+              maximumTrackTintColor="#ddd"
+              thumbTintColor="orange"
+              value={value}
+              onSlidingStart={() => getId(id)}
+              onSlidingComplete={setLightValue}
+            />
+          </View>
+        </>
+      </TouchableHighlight>
+    );
+  };
 
   const renderHiddenItem = (data) => (
     <View style={styles.rowBack}>
@@ -234,23 +222,16 @@ const Home = ({route, navigation}) => {
     </View>
   );
 
-  const handleSubmit = async () => {
-    setAddLight(false);
+  const handleSubmit = (data) => {
+    setIsVisibaleNewRoom(false);
     const newData = [...lightList];
-    const data = {
-      name: roomName,
-      value: 0,
-      isEnable: false,
-      key: uuidv4(),
-      ip: ipAddress,
-    };
     const store = firebase.database().ref(`lights/${userId}/data`).push(data);
-    newData.push({id: store.key, ...data});
-    await Promise.all([setLightList(newData), setRoomName('')]);
+    newData.push({key: store.key, id: store.key, ...data});
+    setLightList(newData);
+    setUserInfo({...userInfo, totalRoom: userInfo.totalRoom + 1});
   };
 
   const openActionSheet = () => {
-    // console.log(status);
     const options = [
       'New room',
       isVisibleIp ? 'Hiden IP Room' : 'Show IP Room',
@@ -269,7 +250,7 @@ const Home = ({route, navigation}) => {
       },
       async (buttonIndex) => {
         if (buttonIndex === 0) {
-          setAddLight(true);
+          setIsVisibaleNewRoom(true);
         } else if (buttonIndex === 1) {
           setIsVisibleIp(!isVisibleIp);
         } else if (buttonIndex === 3) {
@@ -280,64 +261,22 @@ const Home = ({route, navigation}) => {
     );
   };
 
+  const hiddenInfo = () => {
+    setIsVisibleInfo(false);
+  };
+
   return (
     <>
-      <Modal isVisible={isVisibleInfo}>
-        <View
-          style={{
-            backgroundColor: 'white',
-            borderRadius: 10,
-          }}>
-          <Text style={styles.textProfile}>Profile</Text>
-          <Form>
-            <Item floatingLabel>
-              <Label>Name</Label>
-              <Input editable={false} value={userInfo.name} />
-            </Item>
-            <Item floatingLabel>
-              <Label>Email</Label>
-              <Input editable={false} value={userInfo.email} />
-            </Item>
-            <Item floatingLabel>
-              <Label>Total Room</Label>
-              <Input editable={false} value={userInfo.totalRoom} />
-            </Item>
-          </Form>
-          <Button
-            info
-            onPress={() => setIsVisibleInfo(false)}
-            full
-            style={[styles.btnRight, styles.btnLeft]}>
-            <Text>Back</Text>
-          </Button>
-        </View>
-      </Modal>
-      <Modal isVisible={addLight} style={styles.modelNewRoom}>
-        <Form style={styles.newRoom}>
-          <Item floatingLabel style={{marginBottom: 1}}>
-            <Label>Room name</Label>
-            <Input onChangeText={(roomName) => setRoomName(roomName)} />
-          </Item>
-          <Item floatingLabel style={{marginBottom: 1}}>
-            <Label>IP Address</Label>
-            <Input onChangeText={(ipAddress) => setIpAddress(ipAddress)} />
-          </Item>
-          <View style={{flexDirection: 'row'}}>
-            <Button
-              warning
-              style={[styles.btn, styles.btnLeft]}
-              onPress={() => setAddLight(false)}>
-              <Text>Cancel</Text>
-            </Button>
-            <Button
-              info
-              onPress={handleSubmit}
-              style={[styles.btn, styles.btnRight]}>
-              <Text>Add</Text>
-            </Button>
-          </View>
-        </Form>
-      </Modal>
+      <Profile
+        isVisibleInfo={isVisibleInfo}
+        userInfo={userInfo}
+        hiddenInfo={hiddenInfo}
+      />
+      <NewRoom
+        isVisibaleNewRoom={isVisibaleNewRoom}
+        hiddenVisibaleNewRoom={() => setIsVisibaleNewRoom(false)}
+        submitNewRoom={handleSubmit}
+      />
       <Content>
         <Image
           source={require('../assets/img/UET-logo.png')}
@@ -370,7 +309,7 @@ const styles = StyleSheet.create({
   },
   rowFront: {
     backgroundColor: '#FFF',
-    padding: 20,
+    padding: 25,
     borderBottomWidth: 1,
     borderColor: '#ddd',
   },
@@ -382,36 +321,11 @@ const styles = StyleSheet.create({
   backRightBtn: {
     width: 50,
   },
-  newRoom: {
-    backgroundColor: 'white',
-    width: '80%',
-    borderColor: '#fff',
-    borderRadius: 10,
-    margin: '10%',
-  },
-  btnLeft: {
-    borderBottomLeftRadius: 10,
-  },
-  btnRight: {
-    borderBottomRightRadius: 10,
-  },
-  btn: {
-    width: '50%',
-    justifyContent: 'center',
-  },
-
-  modelNewRoom: {
-    // textAlign: 'center',
-    // flex: 1,
-    // justifyContent: 'center',
-    // alignItems: 'center',
-  },
   textIp: {
     color: '#999',
     fontStyle: 'italic',
     fontSize: 12,
   },
-  textProfile: {fontSize: 100, marginBottom: 10, textAlign: 'center'},
 });
 
 export default connectActionSheet(Home);

@@ -6,11 +6,13 @@
  * @flow strict-local
  */
 
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import Home from './src/components/Home';
 import Login from './src/components/Login';
 import Register from './src/components/Register';
+import Wifi from './src/components/modal/Wifi';
 
+import WifiManager from 'react-native-wifi-reborn';
 import {createStackNavigator} from '@react-navigation/stack';
 import {NavigationContainer} from '@react-navigation/native';
 import {ActionSheetProvider} from '@expo/react-native-action-sheet';
@@ -18,9 +20,21 @@ import {ActionSheetProvider} from '@expo/react-native-action-sheet';
 const Stack = createStackNavigator();
 
 export default function App() {
+  const [isEnabled, setIsEnabled] = useState(true);
+
+  useEffect(() => {
+    const countCheck = setInterval(async () => {
+      const enabled = await WifiManager.isEnabled();
+      setIsEnabled(enabled);
+    }, 5000);
+    return () => {
+      clearInterval(countCheck);
+    };
+  });
   return (
     <ActionSheetProvider>
       <NavigationContainer>
+        <Wifi isEnabled={isEnabled} />
         <Stack.Navigator>
           <Stack.Screen name="Login" component={Login} />
           <Stack.Screen name="Register" component={Register} />
